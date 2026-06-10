@@ -1,0 +1,50 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+
+# Virtual environments and local environment variables
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+!.env.example
+
+# Test and coverage output
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Local SQLite data and migration backups
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/lifebutler_backup*.db
+data/lifebutler_backup_before_migration_*.db
+
+# Generated reports, exports, and package artifacts
+outputs/
+build/
+dist/
+*.egg-info/
+*.spec
+
+# Installer/package caches
+pip-wheel-metadata/
+.eggs/
+*.egg
+
+# macOS, editor, and temporary files
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
