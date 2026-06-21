@@ -49,6 +49,9 @@ class ChartWidget(QWidget):
     def set_theme(self, is_dark: bool):
         self.is_dark = is_dark
         self.palette = (self.DARK if is_dark else self.LIGHT).copy()
+        if self.canvas.width() <= 0 or self.canvas.height() <= 0:
+            self.figure.set_facecolor(self.palette["panel"])
+            return
         if self._last_chart:
             # Matplotlib drawings are not affected by Qt stylesheet changes.
             # Redraw the last chart with the new palette when the app theme flips.

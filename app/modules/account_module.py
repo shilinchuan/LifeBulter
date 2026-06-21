@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from app.database import DatabaseManager
 from app.widgets.chart_widget import ChartWidget
+from app.widgets.selection_utils import enable_clear_selection_on_blur
 
 
 class RecordDialog(QDialog):
@@ -145,6 +146,7 @@ class AccountModule(QWidget):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setColumnHidden(0, True)
         self.table.doubleClicked.connect(self._edit_record)
+        enable_clear_selection_on_blur(self.table)
         left_col.addWidget(self.table)
 
         right_col = QVBoxLayout()

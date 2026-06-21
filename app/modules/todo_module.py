@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
 )
 
 from app.database import DatabaseManager
+from app.widgets.selection_utils import enable_clear_selection_on_blur
 
 
 class TodoDialog(QDialog):
@@ -24,6 +25,7 @@ class TodoDialog(QDialog):
     def __init__(self, parent=None, todo: dict = None):
         super().__init__(parent)
         self.todo = todo
+        self.db = DatabaseManager()
         self.setWindowTitle("编辑任务" if todo else "新增任务")
         self.setMinimumWidth(540)
         self._setup_ui()
@@ -215,9 +217,12 @@ class TodoModule(QWidget):
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        for col in (2, 3, 4, 5, 6):
+            self.table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         self.table.setColumnHidden(0, True)
-        self.table.doubleClicked.connect(self._toggle_todo)
+        self.table.doubleClicked.connect(self._edit_todo)
+        enable_clear_selection_on_blur(self.table)
         layout.addWidget(self.table)
 
         self.summary_label = QLabel("统计信息")
@@ -267,6 +272,7 @@ class TodoModule(QWidget):
             table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             table.itemSelectionChanged.connect(lambda q=quadrant: self._on_today_selection_changed(q))
             table.doubleClicked.connect(lambda _, q=quadrant: self._open_quadrant_detail(q))
+            enable_clear_selection_on_blur(table)
             self.quadrant_tables[quadrant] = table
             group_layout.addWidget(open_btn)
             group_layout.addWidget(table)
@@ -472,7 +478,7 @@ class TodoModule(QWidget):
             if not data["title"]:
                 QMessageBox.warning(self, "提示", "任务标题不能为空")
                 return
-            self.db.add_todo(data["title"], "medium", data["due_date"], data["quadrant"])
+            self.db.add_todo(data["title"], "medium", data["due_date"], data["quadrant"], "")
             self._refresh()
 
     def _edit_todo(self):

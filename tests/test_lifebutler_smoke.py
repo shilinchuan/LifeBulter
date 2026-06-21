@@ -3,19 +3,28 @@ import sqlite3
 import tempfile
 import unittest
 from datetime import date
+from unittest.mock import patch
 
 
 # Qt widgets can be constructed without opening real desktop windows. This
 # keeps CI/local smoke tests fast and avoids interfering with the user's app.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QDate
+from PyQt6.QtWidgets import QApplication, QDialog
+from PyQt6.QtCore import QDate, QPoint, Qt
+from PyQt6.QtTest import QTest
 
 from app.database import DatabaseManager, Singleton
 from app.main_window import MainWindow
 from app.modules.account_module import AccountModule, RecordDialog
-from app.modules.todo_module import QuadrantDetailDialog
+from app.modules.dashboard_module import DashboardModule
+from app.modules.goal_module import GoalModule, KeyResultDialog, ObjectiveDialog, ProjectDialog
+from app.modules.review_module import ReviewModule, WeekTaskPickerDialog
+from app.modules.quick_capture_dialog import QuickCaptureDialog
+from app.modules.settings_module import SettingsModule
+from app.modules.todo_module import QuadrantDetailDialog, TodoDialog
+from app.services.overview_service import build_life_radar, build_today_overview
+from app.services.quick_capture_service import parse_quick_capture
 from app.widgets.chart_widget import ChartWidget
 
 
@@ -42,7 +51,7 @@ class LifeButlerSmokeTest(unittest.TestCase):
         db = DatabaseManager()
         today = date.today().isoformat()
         version = db.execute_query("SELECT value FROM schema_meta WHERE key='schema_version'")[0]["value"]
-        self.assertEqual(version, "3")
+        self.assertEqual(version, "5")
 
         task_id = db.add_todo("写测试", "medium", "", "q1", today)
         db.add_pomodoro_session(task_id, f"{today}T09:00:00", f"{today}T09:25:00", 25, 25, "completed")
@@ -114,6 +123,7 @@ class LifeButlerSmokeTest(unittest.TestCase):
         columns = {row["name"] for row in db.execute_query("PRAGMA table_info(todos)")}
         self.assertIn("quadrant", columns)
         self.assertIn("today_date", columns)
+        self.assertNotIn("project_id", columns)
         # Existing rows must survive the migration.
         self.assertEqual(db.get_todos()[0]["title"], "旧任务")
         # The old budgets table is migrated for compatibility, but the budget
@@ -125,8 +135,11 @@ class LifeButlerSmokeTest(unittest.TestCase):
         # changes reach matplotlib charts, not just Qt widgets.
         app = QApplication.instance() or QApplication(["lifebutler-test"])
         window = MainWindow()
-        self.assertEqual(window.stack.count(), 4)
+        self.assertEqual(window.stack.count(), 8)
+        self.assertEqual(window.stack.currentIndex(), 0)
+        self.assertIs(window.stack.widget(0), window.dashboard_module)
         primary_buttons = [
+            window.dashboard_module.capture_btn,
             window.account_module.add_btn,
             window.todo_module.add_btn,
             window.health_module.add_weight_btn,
@@ -142,6 +155,8 @@ class LifeButlerSmokeTest(unittest.TestCase):
         self.assertTrue(all(not chart.is_dark for chart in window.findChildren(ChartWidget)))
         window._apply_theme(True)
         self.assertTrue(all(chart.is_dark for chart in window.findChildren(ChartWidget)))
+        window.dashboard_module._refresh()
+        self.assertGreaterEqual(window.dashboard_module.card_grid.count(), 4)
         # Standalone chart drawing should also work in both themes.
         chart = ChartWidget()
         chart.draw_pie_chart({"餐饮": 20, "交通": 10}, "支出分布")
@@ -150,6 +165,29 @@ class LifeButlerSmokeTest(unittest.TestCase):
         chart.set_theme(False)
         self.assertFalse(chart.is_dark)
         window.close()
+        app.processEvents()
+
+    def test_dashboard_module_and_overview_rules(self):
+        app = QApplication.instance() or QApplication(["lifebutler-test"])
+        db = DatabaseManager()
+        today = date.today().isoformat()
+        dashboard = DashboardModule()
+        overview = build_today_overview(db, today)
+        self.assertEqual(overview["today"], today)
+        self.assertEqual(set(overview["quadrants"].keys()), {"q1", "q2", "q3", "q4"})
+        self.assertIn("pomodoro", overview)
+        self.assertIn("finance", overview)
+        self.assertIn("health", overview)
+        self.assertEqual(dashboard.today_empty_label.text(), "暂无今日任务")
+
+        for idx in range(4):
+            db.add_todo(f"紧急任务 {idx}", "medium", today, "q1", today)
+        radar = build_life_radar(db, today)
+        self.assertTrue(any(item["title"] == "任务过载" for item in radar))
+        self.assertTrue(any(item["title"] == "健康缺口" for item in radar))
+        dashboard._refresh()
+        self.assertEqual(dashboard.today_table.rowCount(), 4)
+        dashboard.close()
         app.processEvents()
 
     def test_account_type_labels_and_chart_toggle(self):
@@ -192,6 +230,26 @@ class LifeButlerSmokeTest(unittest.TestCase):
         module.close()
         app.processEvents()
 
+    def test_settings_module_and_backup(self):
+        app = QApplication.instance() or QApplication(["lifebutler-test"])
+        db = DatabaseManager()
+        db.add_memo("备份测试", "内容", "general", "")
+        settings = SettingsModule()
+        self.assertIn("lifebutler.db", settings.path_edit.toPlainText())
+        self.assertTrue(settings.path_edit.isReadOnly())
+        self.assertGreater(settings.path_edit.maximumHeight(), 40)
+        self.assertEqual(settings.schema_label.text(), "5")
+        backup_path = db.backup_data()
+        self.assertTrue(os.path.exists(backup_path))
+
+        with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), "README.md"), encoding="utf-8") as fh:
+            readme = fh.read()
+        self.assertIn("CLI JSON", readme)
+        self.assertIn("测试命令", readme)
+        self.assertIn("用户验收后", readme)
+        settings.close()
+        app.processEvents()
+
     def test_todo_pool_and_quadrants_stay_in_sync(self):
         # The task pool and four-quadrant overview are two views of the same
         # todos table. This catches regressions where editing one view leaves
@@ -218,6 +276,11 @@ class LifeButlerSmokeTest(unittest.TestCase):
         self.assertEqual(detail.table.rowCount(), 1)
         self.assertEqual(detail.table.columnCount(), 4)
 
+        module.table.selectRow(0)
+        with patch("app.modules.todo_module.TodoDialog.exec", return_value=QDialog.DialogCode.Rejected):
+            module.table.doubleClicked.emit(module.table.model().index(0, 1))
+        self.assertEqual(module.db.get_todo(task_id)["status"], "pending")
+
         todo = module.db.get_todo(task_id)
         # Moving a task between quadrants should immediately move it in the
         # overview after refresh.
@@ -233,6 +296,117 @@ class LifeButlerSmokeTest(unittest.TestCase):
         self.assertEqual(module.db.get_todo(task_id)["status"], "done")
         self.assertEqual(module.quadrant_tables["q2"].rowCount(), 0)
         window.close()
+        app.processEvents()
+
+    def test_goal_module_and_project_ui(self):
+        app = QApplication.instance() or QApplication(["lifebutler-test"])
+        db = DatabaseManager()
+        objective_id = db.add_objective("完成课程项目", "", "quarter", date.today().year, 1)
+        db.add_key_result(objective_id, "完成初稿", "percentage", 40, 100, "%")
+        project_id = db.add_project("数据库报告", "", objective_id)
+
+        goal_module = GoalModule()
+        self.assertFalse(hasattr(goal_module, "edit_objective_btn"))
+        self.assertFalse(hasattr(goal_module, "refresh_btn"))
+        self.assertNotEqual(goal_module.add_objective_btn.objectName(), "primaryActionButton")
+        self.assertGreaterEqual(goal_module.objective_table.rowCount(), 1)
+        goal_module.objective_table.selectRow(0)
+        goal_module._refresh_detail()
+        self.assertEqual(goal_module.kr_table.rowCount(), 1)
+        self.assertEqual(goal_module.project_table.rowCount(), 1)
+        self.assertEqual(goal_module.kr_table.columnCount(), 4)
+        self.assertEqual(
+            [goal_module.kr_table.horizontalHeaderItem(i).text() for i in range(goal_module.kr_table.columnCount())],
+            ["标题", "数值", "进度", "状态"],
+        )
+        self.assertEqual(goal_module.project_table.columnCount(), 2)
+        self.assertEqual(
+            [goal_module.project_table.horizontalHeaderItem(i).text() for i in range(goal_module.project_table.columnCount())],
+            ["标题", "状态"],
+        )
+        self.assertFalse(goal_module.kr_table.horizontalScrollBar().isVisible())
+        self.assertFalse(goal_module.project_table.horizontalScrollBar().isVisible())
+        goal_module.kr_table.selectRow(0)
+        self.assertEqual(goal_module.objective_table.currentRow(), -1)
+        QTest.mouseClick(goal_module.kr_table.viewport(), Qt.MouseButton.LeftButton, pos=QPoint(goal_module.kr_table.viewport().width() - 2, goal_module.kr_table.viewport().height() - 2))
+        app.processEvents()
+        self.assertEqual(goal_module.kr_table.currentRow(), -1)
+
+        goal_module.objective_table.selectRow(0)
+        with patch("app.modules.goal_module._DetailDialog.exec", return_value=QDialog.DialogCode.Rejected):
+            goal_module._open_objective_detail()
+        goal_module.project_table.selectRow(0)
+        with patch("app.modules.goal_module._DetailDialog.exec", return_value=QDialog.DialogCode.Rejected):
+            goal_module._open_project_detail()
+
+        no_project_dialog = TodoDialog()
+        self.assertFalse(hasattr(no_project_dialog, "project_combo"))
+
+        objective_dialog = ObjectiveDialog()
+        kr_dialog = KeyResultDialog()
+        standalone_project_dialog = ProjectDialog(db=db)
+        self.assertEqual(objective_dialog.period_combo.findData("quarter") >= 0, True)
+        self.assertEqual(kr_dialog.metric_combo.findData("percentage") >= 0, True)
+        self.assertEqual(standalone_project_dialog.status_combo.findData("active") >= 0, True)
+        goal_module.close()
+        app.processEvents()
+
+    def test_review_module_week_plan_and_export(self):
+        app = QApplication.instance() or QApplication(["lifebutler-test"])
+        db = DatabaseManager()
+        today = date.today().isoformat()
+        task_id = db.add_todo("周计划任务", "medium", today, "q2", "")
+        year, week, _ = date.today().isocalendar()
+        weekly_id = db.add_weekly_task(task_id, year, week)
+        db.add_weekly_task(task_id, year, week)
+        self.assertEqual(len(db.get_weekly_tasks(year, week)), 1)
+
+        module = ReviewModule()
+        self.assertFalse(hasattr(module, "refresh_btn"))
+        self.assertGreaterEqual(module.week_table.rowCount(), 1)
+        module.week_table.selectRow(0)
+        module._mark_today()
+        task = db.get_todo(task_id)
+        weekly = db.get_weekly_tasks(year, week)[0]
+        self.assertEqual(task["today_date"], today)
+        self.assertEqual(weekly["today_task_date"], today)
+
+        module.week_table.selectRow(0)
+        module.completion_spin.setValue(60)
+        module.progress_edit.setPlainText("推进到初稿")
+        module._save_progress()
+        weekly = db.get_weekly_tasks(year, week)[0]
+        self.assertEqual(weekly["completion"], 60)
+        self.assertEqual(weekly["progress_note"], "推进到初稿")
+
+        module.proud_edit.setPlainText("完成了计划")
+        module.change_edit.setPlainText("减少拖延")
+        module.commit_edit.setPlainText("下周继续")
+        db.save_weekly_review(year, week, "完成了计划", "减少拖延", "下周继续", "")
+        path = module.export_markdown(self.temp_dir.name)
+        self.assertTrue(path.exists())
+        self.assertIn("LifeButler 周报", path.read_text(encoding="utf-8"))
+
+        picker = WeekTaskPickerDialog(db=db)
+        self.assertEqual(picker.table.columnCount(), 4)
+        module.close()
+        app.processEvents()
+
+    def test_quick_capture_dialog_variants_construct(self):
+        app = QApplication.instance() or QApplication(["lifebutler-test"])
+        db = DatabaseManager()
+        today = date.today().isoformat()
+        samples = [
+            ("午饭 28 元", "finance"),
+            ("跑步 30 分钟", "exercise"),
+            ("明天提交数据库报告", "task"),
+            ("想到一个目标地图功能", "memo"),
+        ]
+        for text, kind in samples:
+            dialog = QuickCaptureDialog(parsed=parse_quick_capture(text, today), db=db)
+            self.assertEqual(dialog.get_kind(), kind)
+            self.assertEqual(dialog.stack.currentIndex(), dialog.kind_combo.currentIndex())
+            dialog.close()
         app.processEvents()
 
 

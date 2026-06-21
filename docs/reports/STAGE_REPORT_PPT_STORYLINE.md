@@ -188,7 +188,7 @@ LifeButler 不是四个孤立的小工具，而是一个本地生活管理桌面
 可以直接使用以下提示词进入制作阶段：
 
 ```text
-请基于 STAGE_REPORT_PPT_STORYLINE.md、TECHNICAL_REPORT.md、CHANGELOG.md、app/README.md 和已生成截图，
+请基于 docs/reports/STAGE_REPORT_PPT_STORYLINE.md、docs/reports/TECHNICAL_REPORT.md、CHANGELOG.md、app/README.md 和已生成截图，
 制作一份《程序设计实习》LifeButler 阶段性作业 PPT。
 
 要求：

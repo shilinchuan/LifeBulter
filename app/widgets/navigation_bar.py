@@ -3,16 +3,20 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QSizePolicy
 
 
 class NavigationBar(QWidget):
-    """左侧导航栏——包含四个功能模块切换按钮与主题切换"""
+    """左侧导航栏——包含功能模块切换按钮与主题切换"""
 
-    module_changed = pyqtSignal(int)  # 发射模块索引 0~3
+    module_changed = pyqtSignal(int)
     theme_changed = pyqtSignal(bool)
 
     MODULES = [
-        ("📊  记账管理", 0),
-        ("✅  待办事项", 1),
-        ("❤️  健康记录", 2),
-        ("📝  备忘录", 3),
+        ("🏠  首页", 0),
+        ("📊  记账管理", 1),
+        ("🎯  目标管理", 2),
+        ("✅  待办事项", 3),
+        ("❤️  健康记录", 4),
+        ("📝  备忘录", 5),
+        ("📅  周报复盘", 6),
+        ("⚙️  设置", 7),
     ]
 
     def __init__(self, parent=None):

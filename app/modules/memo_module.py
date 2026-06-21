@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem, QAbstractItemView,
 )
 from app.database import DatabaseManager
+from app.widgets.selection_utils import enable_clear_selection_on_blur
 
 
 class MemoDialog(QDialog):
@@ -123,6 +124,7 @@ class MemoModule(QWidget):
         self.memo_list = QListWidget()
         self.memo_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.memo_list.currentRowChanged.connect(self._on_selection_changed)
+        enable_clear_selection_on_blur(self.memo_list)
         splitter.addWidget(self.memo_list)
 
         self.preview = QTextEdit()

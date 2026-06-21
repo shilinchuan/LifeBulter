@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from app.database import DatabaseManager
 from app.widgets.chart_widget import ChartWidget
+from app.widgets.selection_utils import enable_clear_selection_on_blur
 
 
 class WeightDialog(QDialog):
@@ -164,6 +165,7 @@ class HealthModule(QWidget):
         self.weight_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.weight_table.horizontalHeader().setStretchLastSection(True)
         self.weight_table.doubleClicked.connect(self._edit_weight)
+        enable_clear_selection_on_blur(self.weight_table)
         wt_content.addWidget(self.weight_table, 3)
 
         right_wt = QVBoxLayout()
@@ -207,6 +209,7 @@ class HealthModule(QWidget):
         self.exercise_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.exercise_table.horizontalHeader().setStretchLastSection(True)
         self.exercise_table.doubleClicked.connect(self._edit_exercise)
+        enable_clear_selection_on_blur(self.exercise_table)
         ex_content.addWidget(self.exercise_table, 3)
 
         right_ex = QVBoxLayout()

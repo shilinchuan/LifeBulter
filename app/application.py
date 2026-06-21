@@ -1,8 +1,16 @@
+import sys
+from pathlib import Path
+
 from PyQt6.QtCore import QTimer
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import QApplication, QMainWindow, QSystemTrayIcon, QMenu, QStyle
 
 from app.database import DatabaseManager
+
+
+def resource_path(relative_path: str) -> str:
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    return str(base / relative_path)
 
 
 class LifeButlerApplication(QApplication):
@@ -14,6 +22,9 @@ class LifeButlerApplication(QApplication):
         self.setApplicationDisplayName("LifeButler")
         self.setOrganizationName("LifeButler")
         self.setQuitOnLastWindowClosed(False)
+        self.app_icon = QIcon(resource_path("resources/icon/LifeButler-icon.png"))
+        if not self.app_icon.isNull():
+            self.setWindowIcon(self.app_icon)
 
         self.db = DatabaseManager()
         self.aboutToQuit.connect(self.db.close)
@@ -27,7 +38,8 @@ class LifeButlerApplication(QApplication):
         """初始化系统托盘"""
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setToolTip("智能生活管家")
-        self.tray_icon.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
+        tray_icon = self.app_icon if not self.app_icon.isNull() else self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
+        self.tray_icon.setIcon(tray_icon)
 
         tray_menu = QMenu()
         show_action = QAction("显示主窗口", self)

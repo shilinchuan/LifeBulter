@@ -5,10 +5,14 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QSt
 
 from app.widgets.navigation_bar import NavigationBar
 from app.widgets.chart_widget import ChartWidget
+from app.modules.dashboard_module import DashboardModule
 from app.modules.account_module import AccountModule
+from app.modules.goal_module import GoalModule
 from app.modules.todo_module import TodoModule
 from app.modules.health_module import HealthModule
 from app.modules.memo_module import MemoModule
+from app.modules.review_module import ReviewModule
+from app.modules.settings_module import SettingsModule
 
 
 class MainWindow(QMainWindow):
@@ -32,28 +36,39 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.nav)
 
         self.stack = QStackedWidget()
+        self.dashboard_module = DashboardModule()
         self.account_module = AccountModule()
+        self.goal_module = GoalModule()
         self.todo_module = TodoModule()
         self.health_module = HealthModule()
         self.memo_module = MemoModule()
+        self.review_module = ReviewModule()
+        self.settings_module = SettingsModule()
 
-        self.stack.addWidget(self.account_module)  # index 0
-        self.stack.addWidget(self.todo_module)     # index 1
-        self.stack.addWidget(self.health_module)    # index 2
-        self.stack.addWidget(self.memo_module)      # index 3
+        self.stack.addWidget(self.dashboard_module)  # index 0
+        self.stack.addWidget(self.account_module)    # index 1
+        self.stack.addWidget(self.goal_module)       # index 2
+        self.stack.addWidget(self.todo_module)       # index 3
+        self.stack.addWidget(self.health_module)     # index 4
+        self.stack.addWidget(self.memo_module)       # index 5
+        self.stack.addWidget(self.review_module)     # index 6
+        self.stack.addWidget(self.settings_module)   # index 7
 
         layout.addWidget(self.stack, 1)
 
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("欢迎使用智能生活管家 💡 左侧导航栏切换功能")
+        self.status_bar.showMessage("欢迎使用智能生活管家")
 
         self._apply_theme()
 
     def _switch_module(self, index: int):
         """切换到对应模块页面"""
         self.stack.setCurrentIndex(index)
-        names = ["记账管理", "待办事项", "健康记录", "备忘录"]
+        refresh = getattr(self.stack.currentWidget(), "_refresh", None)
+        if refresh:
+            refresh()
+        names = ["首页", "记账管理", "目标管理", "待办事项", "健康记录", "备忘录", "周报复盘", "设置"]
         if 0 <= index < len(names):
             self.status_bar.showMessage(f"当前模块: {names[index]}")
 
@@ -66,11 +81,13 @@ class MainWindow(QMainWindow):
         # an explicit palette update and redraw.
         for chart in self.findChildren(ChartWidget):
             chart.set_theme(is_dark)
-        # Account/health own the current chart data, so refreshing them after a
-        # theme switch keeps charts and text panels visually consistent.
-        for module in (self.account_module, self.health_module):
+        # Refresh the visible module after the stylesheet flip. Hidden
+        # matplotlib canvases can be zero-sized under offscreen rendering and
+        # will redraw safely when their owning page becomes active.
+        current = self.stack.currentWidget()
+        for module in (self.dashboard_module, self.account_module, self.goal_module, self.health_module, self.review_module, self.settings_module):
             refresh = getattr(module, "_refresh", None)
-            if refresh:
+            if refresh and module is current:
                 refresh()
 
     def _dark_theme(self) -> str:
@@ -219,6 +236,26 @@ class MainWindow(QMainWindow):
                 font-weight: 700;
                 padding: 10px;
             }
+            QFrame#overviewCard {
+                background-color: #121c2d;
+                border: 1px solid #334155;
+                border-radius: 6px;
+            }
+            QLabel#cardTitle {
+                color: #93c5fd;
+                font-weight: 600;
+            }
+            QLabel#cardValue {
+                color: #f8fafc;
+                font-size: 22px;
+                font-weight: 700;
+            }
+            QLabel#dashboardMetric {
+                background-color: #0f172a;
+                border: 1px solid #334155;
+                border-radius: 4px;
+                padding: 8px;
+            }
         """.replace("__DOWN__", down).replace("__UP__", up)
 
     def _light_theme(self) -> str:
@@ -339,6 +376,26 @@ class MainWindow(QMainWindow):
                 font-size: 42px;
                 font-weight: 700;
                 padding: 10px;
+            }
+            QFrame#overviewCard {
+                background-color: #ffffff;
+                border: 1px solid #d8dee9;
+                border-radius: 6px;
+            }
+            QLabel#cardTitle {
+                color: #2563eb;
+                font-weight: 600;
+            }
+            QLabel#cardValue {
+                color: #0f172a;
+                font-size: 22px;
+                font-weight: 700;
+            }
+            QLabel#dashboardMetric {
+                background-color: #f8fafc;
+                border: 1px solid #d8dee9;
+                border-radius: 4px;
+                padding: 8px;
             }
         """.replace("__DOWN__", down).replace("__UP__", up)
 

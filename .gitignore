@@ -35,6 +35,7 @@ build/
 dist/
 *.egg-info/
 *.spec
+!packaging/*.spec
 
 # Installer/package caches
 pip-wheel-metadata/

@@ -37,11 +37,13 @@ data/lifebutler.db
 LIFEBUTLER_DB_PATH=/tmp/test.db .venv/bin/python -m unittest discover -s tests -v
 ```
 
-数据库当前目标版本为 `schema_version = 3`：
+数据库当前目标版本为 `schema_version = 5`：
 
 - version 1：旧基础表结构。
 - version 2：给任务增加 `quadrant`、`today_date`、`updated_at`，新增 `pomodoro_sessions`。
 - version 3：兼容旧预算表约束迁移；预算功能当前已从界面和公开数据 API 移除。
+- version 4：新增 `objectives`、`key_results`、`projects`、`weekly_tasks`、`weekly_reviews`。
+- version 5：从 `todos` 移除 `project_id`，任务不再绑定项目。
 
 迁移前会自动备份旧数据库。不要跳过迁移直接改表，否则已有用户数据可能因为缺列或约束不匹配而无法打开。
 
